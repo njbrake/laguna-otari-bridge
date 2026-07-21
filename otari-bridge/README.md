@@ -52,20 +52,16 @@ with swap essentially untouched.
 
 ### Why speculative decoding is off despite the model card recommending it
 
-Speculative decoding wins when generation is memory-bandwidth-bound: normally
-one token requires reading every weight, so verifying K drafted tokens in one
-batched pass costs about the same as generating one.
+Because the drafter never lands a single token:
 
-That does not hold for a sparse MoE. Laguna is 118B total but only **8B active
-per token** — each token reads just its selected experts. Batching K draft
-tokens for verification requires the **union** of experts across all K, which
-approaches the full 118B as K grows, destroying exactly the sparsity that makes
-the model fast at batch=1.
+```
+draft acceptance = 0.00000 (0 accepted / 8865 generated), mean len = 1.00
+```
 
-The cost scaling monotonically with K (39.5 → 15.9 → 6.9) is the signature of
-that effect rather than of a fixed unoptimised-code-path overhead. Speculative
-decoding pays off for MoE mainly when compute-bound (large-batch serving), not
-for single-user local inference.
+Every drafted token is wasted work, proportional to `n-max` — hence the
+39.5 → 15.9 → 6.9 progression. This is a broken drafter, not evidence that
+speculative decoding is inherently unsuited to this model; see the root-cause
+notes in the [top-level README](../README.md).
 
 Re-test after a fork update with `SPEC=1 ./run-bridge.sh` (or `SPEC=1 SPEC_N=8`).
 

@@ -14,10 +14,10 @@ prompt processing, at 128K context.
 Most of the value here is the things that are not documented elsewhere, and
 that cost time to discover.
 
-### Speculative decoding makes this model ~6× *slower*
+### DFlash speculative decoding gets 0% draft acceptance here
 
-The model card recommends the DFlash drafter. On this setup it is a large net
-loss:
+The model card recommends the DFlash drafter. Enabling it made generation
+several times *slower*:
 
 | Config | gen tok/s |
 |---|---|
@@ -25,29 +25,50 @@ loss:
 | spec decoding on, n-max=4 | 15.9 |
 | spec decoding on, n-max=15 | 6.9 |
 
-Speculative decoding wins when generation is memory-bandwidth-bound: normally
-one token requires reading every weight, so verifying K drafted tokens in a
-single batched pass costs about the same as generating one.
+The cause is visible in the server log:
 
-That does not hold for a **sparse MoE**. Laguna is 118B total but only 8B
-active per token — each token reads just its selected experts. Batching K draft
-tokens requires the **union** of experts across all K, which approaches the
-full 118B as K grows, destroying the sparsity that makes the model fast at
-batch=1.
+```
+draft acceptance = 0.00000 (0 accepted / 8865 generated), mean len = 1.00
+```
 
-The cost scaling monotonically with K is the signature of that effect, rather
-than of a fixed unoptimised-code-path overhead. Speculative decoding pays off
-for MoE mainly when compute-bound (large-batch serving), not for single-user
-local inference.
+**Not one** drafted token was ever accepted. Every drafted token is wasted
+compute, and the waste is proportional to `n-max` — which is exactly the
+slowdown pattern above.
 
-### You need poolside's llama.cpp fork
+**This is a failure, not a tuning curve.** A 0% acceptance rate means the
+drafter is not working, so do not read the table as "speculative decoding is
+bad for this model." Correctly configured, it may well help; these numbers
+say nothing about its potential.
+
+Root cause is **not established**. What is known:
+
+- The flags match the model card exactly, and the draft GGUF's metadata is
+  correct (`dflash.decoder_arch = laguna`, `block_size = 16`).
+- DFlash is EAGLE-style: the drafter consumes **hidden states extracted from
+  the target model's internal layers** (`llama_set_embeddings_layer_inp`). If
+  that extraction path is broken or unimplemented on the Metal backend, the
+  drafter would receive garbage and accept nothing — consistent with what is
+  observed, but **unverified**.
+- Startup logs an initialization failure that is annotated as benign:
+  `dflash requires ctx_other to be set (this warning is normal during memory
+  fitting)`. Whether it is genuinely benign here is untested.
+
+The obvious next experiment is comparing draft acceptance on the CPU backend
+against Metal. If CPU accepts and Metal does not, it is a backend gap.
+
+### Runtime options
 
 - **Upstream llama.cpp does not support Laguna-S.** PR
   [#25165](https://github.com/ggml-org/llama.cpp/pull/25165) covers only XS.2
-  and M.1, and is still open.
-- **MLX is not an option** — `mlx-lm` does not recognise the architecture.
-- Build [poolside's fork](https://github.com/poolsideai/llama.cpp), branch
-  `laguna`, which added Laguna-S.2 support on 2026-07-20.
+  and M.1, and is still open. Use
+  [poolside's fork](https://github.com/poolsideai/llama.cpp), branch `laguna`,
+  which added Laguna-S.2 support on 2026-07-20.
+- **MLX**: poolside publishes an official MLX export,
+  [`Laguna-S-2.1-NVFP4-mlx`](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4-mlx)
+  (4-bit, 71.9GB). This repo has **not** benchmarked it against the llama.cpp
+  path; it may be the better option on Apple Silicon. Note that reports of
+  `mlx-lm` failing to recognise the architecture refer to *community quants of
+  Laguna-XS.2*, which is a different model from official S 2.1.
 
 ### A latent Metal f16 overflow can cause empty output
 
