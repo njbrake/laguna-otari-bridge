@@ -6,8 +6,29 @@ Run [`poolside/Laguna-S-2.1`](https://huggingface.co/poolside/Laguna-S-2.1) —
 a 118B / 8B-active MoE — locally on Apple Silicon with llama.cpp + Metal, and
 expose it as an authenticated OpenAI-compatible endpoint.
 
-Measured on an M4 Max Mac Studio (128GB): **~40 tok/s** generation, ~470 tok/s
-prompt processing, at 128K context.
+Measured on an M4 Max Mac Studio (128GB): **37 tok/s** generation at short
+context, **27 tok/s** at 68K, with prompt processing around 430 tok/s.
+
+### Generation speed vs context depth
+
+Generation slows as context grows — attention over the KV cache costs more per
+token. Sampled from 41 real requests (an agent workload, not a benchmark), the
+decay is smooth and predictable:
+
+| Context | gen tok/s |
+|---|---|
+| ~9.5K | 37.4 |
+| ~22K | 35.5 |
+| ~38K | 33.2 |
+| ~52K | 30.1 |
+| ~68K | 27.0 |
+
+Averages: **36.6 tok/s** under 20K context, **28.5 tok/s** above 50K — roughly
+a 25% falloff across that range. Quote the short-context number only if your
+workload actually uses short prompts; coding agents rarely do.
+
+Prompt processing held ~430 tok/s on average (peak 630, min 303) and, unlike
+generation, did not degrade appreciably with depth over the range sampled.
 
 ## Findings
 
