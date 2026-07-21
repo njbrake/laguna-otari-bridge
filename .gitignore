@@ -18,6 +18,7 @@ otari-bridge/caddy
 
 # --- local runtime state ---
 .venv/
+.venv-mlx/
 *.log
 .claude/
 .DS_Store

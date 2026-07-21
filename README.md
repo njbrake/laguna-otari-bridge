@@ -63,12 +63,25 @@ against Metal. If CPU accepts and Metal does not, it is a backend gap.
   and M.1, and is still open. Use
   [poolside's fork](https://github.com/poolsideai/llama.cpp), branch `laguna`,
   which added Laguna-S.2 support on 2026-07-20.
-- **MLX**: poolside publishes an official MLX export,
-  [`Laguna-S-2.1-NVFP4-mlx`](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4-mlx)
-  (4-bit, 71.9GB). This repo has **not** benchmarked it against the llama.cpp
-  path; it may be the better option on Apple Silicon. Note that reports of
-  `mlx-lm` failing to recognise the architecture refer to *community quants of
-  Laguna-XS.2*, which is a different model from official S 2.1.
+- **MLX does not work** (as of 2026-07-21). poolside publishes an official
+  export, [`Laguna-S-2.1-NVFP4-mlx`](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4-mlx)
+  (4-bit, 71.9GB), but no MLX runtime can load it yet:
+
+  ```
+  $ python -c "from mlx_lm import load; load('./Laguna-S-2.1-NVFP4-mlx')"
+  ValueError: Model type laguna not supported.
+  ```
+
+  Verified against mlx-lm **0.31.3** (latest) with mlx 0.32.0. The `laguna`
+  architecture is absent from mlx-lm's model modules in both the release and
+  git `main`. The `nvfp4` quantization itself is supported — the architecture
+  is the blocker.
+
+  Tracking: mlx-lm [PR #1223](https://github.com/ml-explore/mlx-lm/pull/1223)
+  (open, unmerged, and for XS.2 rather than S 2.1) and
+  [issue #1378](https://github.com/ml-explore/mlx-lm/issues/1378). poolside
+  maintains a llama.cpp fork but no mlx-lm fork. The weights were published
+  ahead of runtime support; re-check before assuming this is still true.
 
 ### A latent Metal f16 overflow can cause empty output
 
