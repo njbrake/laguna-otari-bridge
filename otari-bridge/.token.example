@@ -1,0 +1,8 @@
+Copy this file to `.token` and replace the contents with a strong random token:
+
+    openssl rand -hex 32 > .token
+    chmod 600 .token
+
+`.token` is gitignored. It is the shared bearer secret that the Caddy gate
+requires on every request, and that the client sends as `Authorization: Bearer
+<token>`. Anyone holding it can reach your model through the public Funnel URL.

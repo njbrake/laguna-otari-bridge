@@ -1,0 +1,62 @@
+# Native Caddy auth gate for Laguna-S 2.1 (llama-server).
+# Funnel terminates TLS on :443 and forwards plain HTTP to this listener on
+# :9000. Require an exact bearer token, else 401, then proxy to llama-server.
+#
+# {$LLM_API_TOKEN} is read from the environment when Caddy loads this file.
+{
+	admin off
+}
+
+:9000 {
+	# Loopback only. Funnel connects from this host to 127.0.0.1:9000, so a
+	# wildcard bind would expose the gate to the LAN for no benefit. Must be
+	# `bind` -- a hostname in the site address would match on Host header
+	# instead and 400 the funnel's requests.
+	bind 127.0.0.1
+
+	@authorized header Authorization "Bearer {$LLM_API_TOKEN}"
+
+	handle @authorized {
+		# Laguna has a 256K context, so Otari can legitimately send large
+		# prompts. Much roomier than the ds4 gate's 2MB.
+		request_body {
+			max_size 32MB
+		}
+
+		# llama-server IGNORES the requested model id -- it serves whatever
+		# single model was loaded. So a stale `deepseek-v4-flash` config would
+		# silently get Laguna and look perfectly healthy. That is worse than a
+		# hard failure, so reject a mismatched id loudly here.
+		#
+		# Matched on the `model` JSON field specifically rather than a substring
+		# of the whole body: a prompt that merely *mentions* the model name must
+		# not satisfy the check. Only applied to the endpoints that carry a model
+		# field -- GET /v1/models and friends have no body and must still pass.
+		@wrongmodel {
+			path /v1/chat/completions /v1/completions /v1/embeddings
+			not expression `{http.request.body}.matches('"model"\\s*:\\s*"laguna-s-2\\.1"')`
+		}
+		handle @wrongmodel {
+			header Content-Type application/json
+			respond `{"error":{"message":"This endpoint serves only 'laguna-s-2.1'. The requested model id did not match, and llama-server would otherwise have silently answered with Laguna anyway. Update the client's model id.","type":"invalid_request_error","code":"model_mismatch"}}` 400
+		}
+
+		reverse_proxy 127.0.0.1:8000 {
+			# llama-server streams tokens as text/event-stream; -1 forces
+			# immediate flushing so SSE isn't buffered.
+			flush_interval -1
+
+			# A 118B MoE on Metal can take a while on long prompts, and
+			# prompt processing happens before the first token is emitted.
+			# Caddy's default 5m read timeout would cut that off.
+			transport http {
+				read_timeout 30m
+				write_timeout 30m
+			}
+		}
+	}
+
+	handle {
+		respond "Unauthorized" 401
+	}
+}

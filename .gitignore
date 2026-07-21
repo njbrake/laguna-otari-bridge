@@ -1,0 +1,23 @@
+# --- secrets ---
+# Shared bearer token. Never commit. Generate with: openssl rand -hex 32
+.token
+.env
+
+# --- model weights (~77GB) ---
+# Fetched from HF: see README. Far past GitHub's file size limits.
+models/
+
+# --- build dependency, not our code ---
+# Cloned from github.com/poolsideai/llama.cpp (branch: laguna). Has its own
+# .git; committing it would nest a foreign repo.
+llama.cpp/
+
+# --- vendored binary (50MB) ---
+# Download from https://caddyserver.com/download instead.
+otari-bridge/caddy
+
+# --- local runtime state ---
+.venv/
+*.log
+.claude/
+.DS_Store
