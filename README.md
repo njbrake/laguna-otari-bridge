@@ -1,3 +1,5 @@
+> README.md written by Claude under direction from njbrake. There may be mistakes.
+> 
 # laguna-otari-bridge
 
 Run [`poolside/Laguna-S-2.1`](https://huggingface.co/poolside/Laguna-S-2.1) —
